@@ -18,19 +18,65 @@ static const char *TAG = "led";
 #define LED_B_PIN 5
 #define LED_B_CHANNEL LEDC_CHANNEL_2
 
+const uint32_t LED_PWM_RESOLUTION = LEDC_TIMER_12_BIT;
 volatile struct
 {
     uint8_t r, g, b;
     ledc_mode_t mode;
+    uint32_t blink_period;
+    uint32_t blink_duty;
+    uint32_t breath_period;
 } led_config;
+
+// Gamma correction
+// out = in^(2.2)
+int32_t gamma_correction(int32_t value_q15)
+{
+    int32_t t_q15 = value_q15;
+    int32_t t2_q15 = (t_q15 * t_q15) >> 15;
+    int32_t t3_q15 = (t2_q15 * t_q15) >> 15;
+    int32_t t4_q15 = (t2_q15 * t2_q15) >> 15;
+
+    const int32_t a0 = -0.0177348 * (1 << 15);
+    const int32_t a1 = 0.744491 * (1 << 15);
+    const int32_t a2 = 0.37206 * (1 << 15);
+    const int32_t a3 = -0.0991667 * (1 << 15);
+
+    int32_t out_q15 = a0 * t_q15 + a1 * t2_q15 + a2 * t3_q15 + a3 * t4_q15;
+    out_q15 >>= 15;
+
+    if (out_q15 > 0x00080000)
+        out_q15 = 0x00080000;
+    if (out_q15 < 0)
+        out_q15 = 0;
+    return out_q15;
+}
 
 void led_update_value(uint8_t r, uint8_t g, uint8_t b)
 {
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LED_R_CHANNEL, 255 - r);
+    static const int32_t full = 1 << LED_PWM_RESOLUTION;
+
+    // This conversion is based on the documentation of the LEDC library
+    // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/ledc.html#change-pwm-duty-cycle-using-software
+    // the range of the duty is not 0 ~ 2**duty_resolution-1,
+    // but 0 ~ (2**duty_resolution), so the value of it should be scale to range.
+    int32_t r_duty_q15 = (r << 15) / 255;
+    int32_t r_duty_corrected = gamma_correction(r_duty_q15);
+    int32_t r_duty = (r_duty_corrected * full) >> 15;
+
+    int32_t g_duty_q15 = (g << 15) / 255;
+    int32_t g_duty_corrected = gamma_correction(g_duty_q15);
+    int32_t g_duty = (g_duty_corrected * full) >> 15;
+
+    int32_t b_duty_q15 = (b << 15) / 255;
+    int32_t b_duty_corrected = gamma_correction(b_duty_q15);
+    int32_t b_duty = (b_duty_corrected * full) >> 15;
+
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LED_R_CHANNEL, full - r_duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LED_R_CHANNEL);
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LED_G_CHANNEL, 255 - g);
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LED_G_CHANNEL, full - g_duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LED_G_CHANNEL);
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LED_B_CHANNEL, 255 - b);
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, LED_B_CHANNEL, full - b_duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LED_B_CHANNEL);
 }
 
@@ -77,8 +123,6 @@ void led_update_breath()
     g = (led_config.g * t_q15) >> 15;
     b = (led_config.b * t_q15) >> 15;
 
-    printf("r: %lu, g: %lu, b: %lu\n", r, g, b);
-
     // update value
     led_update_value(r, g, b);
 }
@@ -97,7 +141,7 @@ void led_task_main()
     ledc_timer_config_t ledc_timer = {
         .speed_mode = LEDC_LOW_SPEED_MODE,
         .timer_num = LEDC_TIMER_0,
-        .duty_resolution = LEDC_TIMER_8_BIT,
+        .duty_resolution = LED_PWM_RESOLUTION,
         .freq_hz = 5000,
         .clk_cfg = LEDC_AUTO_CLK,
     };
