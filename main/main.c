@@ -6,6 +6,7 @@
 #include <esp_netif.h>
 #include <esp_event.h>
 #include <nvs_flash.h>
+#include <wifi.h>
 
 
 #define TAG "main"
@@ -33,6 +34,8 @@ void app_main()
     init_udp_task();
 
     ESP_LOGI(TAG, "Scan for WiFi APs...");
+
+    
 
     led_set_color(0, 0, 255);
     led_set_mode(LED_MODE_BREATH);
