@@ -8,7 +8,6 @@
 #include <nvs_flash.h>
 #include <wifi.h>
 
-
 #define TAG "main"
 
 void app_main()
@@ -29,14 +28,14 @@ void app_main()
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-    ESP_LOGI(TAG, "Initialize UDP task...");
-
-    init_udp_task();
-
-    ESP_LOGI(TAG, "Scan for WiFi APs...");
-
-    
-
     led_set_color(0, 0, 255);
     led_set_mode(LED_MODE_BREATH);
+
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+    ESP_LOGI(TAG, "Initialize UDP task...");
+
+    led_set_color(0, 0, 0);
+
+    init_udp_task();
 }
